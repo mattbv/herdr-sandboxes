@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://herdr.dev/mods"><img src="https://img.shields.io/badge/herdr-mod-7c6cf0?style=flat-square&labelColor=1f1f22" alt="Herdr mod"></a>
-  <img src="https://img.shields.io/badge/sbx-read--only-3fa66b?style=flat-square&labelColor=1f1f22" alt="Read-only sbx calls">
+  <img src="https://img.shields.io/badge/sbx-no%20changes%20to%20sandboxes-3fa66b?style=flat-square&labelColor=1f1f22" alt="Never changes a sandbox or its policy">
   <img src="https://img.shields.io/badge/no-server%20%C2%B7%20no%20service-8e929a?style=flat-square&labelColor=1f1f22" alt="No server, no service">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-8e929a?style=flat-square&labelColor=1f1f22" alt="MIT license"></a>
 </p>
@@ -54,7 +54,7 @@ cp -R herdr-sandboxes/mods/sandboxes ~/.config/herdr-app/mods/
 herdr-app check ~/.config/herdr-app/mods/sandboxes
 ```
 
-Then put it in a layout of your own. Herdr's shipped layouts are read-only, so clone one first: `herdr-app do layout.clone '{"name":"main","as":"my-layout"}'`.
+Then put it in a layout of your own. Herdr's shipped layouts are read-only, so clone one first: `herdr-app do layout.clone '{"name":"main","as":"my-layout"}'`. That writes `~/.config/herdr-app/layouts/my-layout.json`, the file the steps below edit. Place one copy of the mod only: each copy polls `sbx` on its own.
 
 **As a side panel, next to Files and Changes.** Add a block to the `panel-body` stack:
 
@@ -62,7 +62,7 @@ Then put it in a layout of your own. Herdr's shipped layouts are read-only, so c
 { "id": "sandboxes", "type": "block", "content": { "mod": "sandboxes" } }
 ```
 
-Herdr's tab bar (the shipped `tabs` mod) draws only the Files and Changes buttons. For a Sandboxes button, clone it and point your layout's `tabs` block at the clone:
+Herdr's tab bar (the shipped `tabs` mod) draws only the Files and Changes buttons. For a Sandboxes button, clone it, and in `my-layout.json` change the `tabs` block's `"mod": "tabs"` to `"mod": "tabs-panels"`:
 
 ```sh
 herdr-app do mod.clone '{"name":"tabs","as":"tabs-panels"}'
@@ -107,19 +107,19 @@ A cloned mod does not get Herdr's updates to the tab bar. Clone it again after a
 
 - CPU, memory and disk on one 0–100% chart, over **15m, 1h or 6h**. Hover for the values at a moment.
 - Readings are kept for 6 hours, across restarts, in the mod's own storage (`~/.config/herdr-app/data/sandboxes/store.json`). They never leave your machine.
-- Recording goes on while the panel is closed. **Rec** in the header pauses it; **Clear** under a chart forgets that sandbox.
+- Recording starts the first time you open the panel after Herdr starts, then goes on while the panel is closed. **Rec** in the header pauses it; **Clear** under a chart forgets that sandbox.
 - The line colors were checked for color-vision deficiency on light and dark themes, and the legend always shows each value as text.
 
 ## What it runs
 
-Every 10 seconds, read-only:
+Every 10 seconds:
 
 - `sbx daemon status`: if the daemon is off, the mod stops here. It never starts the daemon.
 - `sbx ls --json`: the sandboxes.
 - `sbx policy log --json`: blocked network requests.
-- Every 15 seconds, in each running sandbox: `sbx exec <name> sh -c '…'`, which reads `/proc/stat`, `/proc/meminfo`, `df` and `nproc`.
+- Every 20 seconds, in each running sandbox: `sbx exec <name> sh -c '…'`, which reads `/proc/stat`, `/proc/meminfo` and `df`.
 
-It never creates, stops, removes or changes a sandbox or its policy, and it makes no network requests of its own.
+It never creates, stops, removes or changes a sandbox or its policy, and it makes no network requests of its own. One side effect: `sbx` counts the health reading as use, so a running sandbox's last-used time keeps moving while the panel runs.
 
 Tested with `sbx` 0.47.0 and the Herdr desktop app 0.1.15 on macOS (Apple silicon).
 

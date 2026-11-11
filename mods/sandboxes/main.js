@@ -1,20 +1,21 @@
 // Sandboxes: every Docker Sandbox (sbx) on this machine, as a Herdr panel.
 // Status, CPU / memory / disk, and the network requests the sandbox policy blocked.
 //
-// Read-only: runs `sbx daemon status`, `sbx ls --json`, `sbx policy log --json` and,
-// in running sandboxes, a short `sbx exec` that reads /proc and df. It never starts
-// the sbx daemon and never changes a sandbox. Output formats checked against sbx 0.47.0.
+// Runs `sbx daemon status`, `sbx ls --json`, `sbx policy log --json` and, in running
+// sandboxes, a short `sbx exec` that reads /proc and df (sbx counts that as use: the
+// sandbox's last_used_at moves). It never starts the sbx daemon and never creates,
+// stops, removes or changes a sandbox or its policy. Formats checked against sbx 0.47.0.
 import { View, div, PathBuilder } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { exec, theme, home, props, settings } from "herdr";
 
 const EVERY = 10 * 1000;          // ms between sbx ls / policy log
-const HEALTH_EVERY = 15 * 1000;   // ms between health probes per running sandbox
+const HEALTH_EVERY = 20 * 1000;   // ms between health probes per running sandbox (every 2nd poll)
 const TIMEOUT = 8000;             // ms per sbx call
 const RETAIN = 6 * 3600 * 1000;   // ms of usage history kept per sandbox
 const RANGES = [[15 * 60 * 1000, "15m"], [3600 * 1000, "1h"], [6 * 3600 * 1000, "6h"]];
-const SLICES = 60;
-const PLOT_H = 76;                // px, chart height                // hover columns across a chart
+const SLICES = 60;                // hover columns across a chart
+const PLOT_H = 76;                // px, chart height
 const BUCKETS = 120;              // most points drawn per line
 // Chart series: blue, orange, aqua (validated for color-vision deficiency on light
 // and dark surfaces; values and labels are always shown as text too).
@@ -23,7 +24,7 @@ const SERIES = [
   { key: 2, label: "Mem", light: "#eb6834", dark: "#d95926" },
   { key: 3, label: "Disk", light: "#1baf7a", dark: "#199e70" },
 ];
-const PROBE = "cat /proc/stat | head -1; cat /proc/meminfo | head -3; df -P -k /home/agent | tail -1; nproc";
+const PROBE = "cat /proc/stat | head -1; cat /proc/meminfo | head -3; df -P -k /home/agent | tail -1";
 
 // The first JSON object in text: `sbx ls` can print an update box after it.
 function firstJson(text) {
@@ -58,7 +59,6 @@ function parseProbe(stdout) {
       }
     } else if (line.startsWith("MemTotal:")) s.memTotal = num(line.slice(9));
     else if (line.startsWith("MemAvailable:")) s.memAvail = num(line.slice(13));
-    else if (/^\d+$/.test(line)) s.cpus = Number(line);
     else {
       const f = line.split(/\s+/);
       if (f.length >= 6 && f[4].endsWith("%")) s.disk = Number(f[4].slice(0, -1));
@@ -66,6 +66,9 @@ function parseProbe(stdout) {
   }
   return s;
 }
+
+// A 15% tint of a theme color, when it is a plain #rrggbb.
+const tint = (c, fallback) => (/^#[0-9a-f]{6}$/i.test(c ?? "") ? `${c}26` : fallback);
 
 const pct = (n) => (n == null || !Number.isFinite(n) ? "–" : `${Math.round(n)}%`);
 
@@ -86,6 +89,16 @@ function save(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable: keep in memory */ }
 }
 
+// Stored history must be { name: [[ms, cpu, mem, disk], ...] }; anything else is dropped.
+function validHistory(h) {
+  if (!h || typeof h !== "object" || Array.isArray(h)) return {};
+  const out = {};
+  for (const [k, v] of Object.entries(h)) {
+    if (Array.isArray(v)) out[k] = v.filter((p) => Array.isArray(p) && p.length === 4 && Number.isFinite(p[0]));
+  }
+  return out;
+}
+
 function shortPath(p) {
   const h = home();
   return p && h && p.startsWith(`${h}/`) ? `~${p.slice(h.length)}` : p ?? "";
@@ -101,7 +114,8 @@ export default class Sandboxes extends View {
     this.open = new Set(load("open", []));  // expanded rows, kept across restarts
     this.busy = false;
     this.recording = load("record", true);
-    this.hist = load("history", {});   // vm name → [[ms, cpu, mem, disk], ...]
+    this.hist = validHistory(load("history", {}));   // vm name → [[ms, cpu, mem, disk], ...]
+    this.dirty = false;                 // history changed since it was last saved
     this.range = load("range", RANGES[1][0]);
     this.hover = null;                  // { name, k } while the pointer is on a chart
     this.poll(cx);
@@ -128,8 +142,12 @@ export default class Sandboxes extends View {
     let daemon;
     try {
       daemon = await exec("sbx", ["daemon", "status"], { timeout: TIMEOUT });
-    } catch {
-      this.state = "missing";
+    } catch (e) {
+      const msg = String(e?.message ?? e);
+      // Only "can't start the program" means sbx is missing; a timeout is an error.
+      this.state = /not found|no such file|enoent|cannot (start|find)|failed to (start|spawn)/i.test(msg) ? "missing" : "error";
+      this.message = this.state === "error" ? `sbx daemon status: ${msg}` : "";
+      this.boxes = [];
       return;
     }
     if (daemon.code !== 0 || !/Status:\s*running/i.test(daemon.stdout)) {
@@ -147,6 +165,11 @@ export default class Sandboxes extends View {
     }
     this.boxes = Array.isArray(list.sandboxes) ? list.sandboxes : [];
     this.state = "ok";
+    const names = new Set(this.boxes.map((b) => b.name));
+    if ([...this.open].some((n) => !names.has(n))) {
+      this.open = new Set([...this.open].filter((n) => names.has(n)));
+      save("open", [...this.open]);
+    }
 
     const log = await exec("sbx", ["policy", "log", "--json"], { timeout: TIMEOUT });
     const pol = log.code === 0 ? firstJson(log.stdout) : null;
@@ -164,18 +187,19 @@ export default class Sandboxes extends View {
     const running = this.boxes.filter((b) => b.status === "running");
     await Promise.all(running.map(async (b) => {
       const h = this.health[b.name];
-      if (h && now - h.at < HEALTH_EVERY) return;
+      if (h && now - h.at < HEALTH_EVERY - 2000) return;
+      if (typeof b.name !== "string" || b.name.startsWith("-")) return;
       try {
         const r = await exec("sbx", ["exec", b.name, "sh", "-c", PROBE], { timeout: TIMEOUT });
         if (r.code !== 0) return;
         const s = parseProbe(r.stdout);
         const prev = h?.prev;
-        let cpu = h?.cpu ?? null;
-        if (prev?.cpuTotal != null && s.cpuTotal > prev.cpuTotal) {
+        let cpu = null; // only a real delta between two samples counts
+        if (prev?.cpuTotal != null && s.cpuTotal != null && s.cpuTotal > prev.cpuTotal) {
           cpu = 100 * (1 - (s.cpuIdle - prev.cpuIdle) / (s.cpuTotal - prev.cpuTotal));
         }
         const mem = s.memTotal ? 100 * (1 - s.memAvail / s.memTotal) : null;
-        this.health[b.name] = { prev: s, cpu, mem, disk: s.disk ?? null, at: now };
+        this.health[b.name] = { prev: s.cpuTotal != null ? s : prev, cpu, mem, disk: s.disk ?? null, at: now };
         if (this.recording) this.record(b.name, now, cpu, mem, s.disk ?? null);
       } catch {
         // a slow or stopped sandbox: keep the last reading
@@ -184,13 +208,14 @@ export default class Sandboxes extends View {
     for (const name of Object.keys(this.health)) {
       if (!running.some((b) => b.name === name)) delete this.health[name];
     }
-    if (this.recording) save("history", this.hist);
+    if (this.dirty) { save("history", this.hist); this.dirty = false; }
   }
 
   record(name, now, cpu, mem, disk) {
     const r = (v) => (v == null || !Number.isFinite(v) ? null : Math.round(v * 10) / 10);
     const list = (this.hist[name] ??= []);
     list.push([now, r(cpu), r(mem), r(disk)]);
+    this.dirty = true;
     const cut = now - RETAIN;
     while (list.length && list[0][0] < cut) list.shift();
     for (const k of Object.keys(this.hist)) {
@@ -212,9 +237,10 @@ export default class Sandboxes extends View {
       .child(btn(`sb-clear-${name}`, "Clear", false, () => { delete this.hist[name]; save("history", this.hist); }));
 
     if (raw.length < 2) {
+      if (this.hover?.name === name) this.hover = null;
       return v_flex().gap(4).pt(4)
         .child(div().text_size(11).text_color(t.dim).child(this.recording
-          ? "Collecting usage… the chart starts after a few readings."
+          ? "Collecting usage… the chart starts after two readings in this range."
           : "Recording is off. Turn it on in the panel header."))
         .when(raw.length > 0 || (this.hist[name] ?? []).length > 0, (e) => e.child(controls));
     }
@@ -224,7 +250,7 @@ export default class Sandboxes extends View {
     const pts = [];
     let cur = null;
     for (const p of raw) {
-      const bi = Math.floor((p[0] - start) / width);
+      const bi = Math.floor(p[0] / width);
       if (!cur || cur.bi !== bi) { cur = { bi, t: 0, n: [0, 0, 0, 0], s: [0, 0, 0, 0] }; pts.push(cur); }
       cur.t = p[0];
       for (const i of [1, 2, 3]) if (p[i] != null) { cur.s[i] += p[i]; cur.n[i]++; }
@@ -251,7 +277,7 @@ export default class Sandboxes extends View {
       let drawn = 0, last = null;
       for (const p of points) {
         const v = p[s.key];
-        if (v == null) { last = null; continue; }
+        if (v == null) continue;
         if (last == null || p[0] - last > gap) pb = pb.move_to(x(p[0]), y(v));
         else { pb = pb.line_to(x(p[0]), y(v)); drawn++; }
         last = p[0];
@@ -299,12 +325,17 @@ export default class Sandboxes extends View {
     return v_flex().flex_none()
       .child(h_flex().id(`sb-${b.name}`).px(8).h(30).flex_none().rounded(8).items_center().gap(9)
         .cursor_pointer().hover((s) => s.bg(t.hover))
-        .on_click((_e, cx) => { open ? this.open.delete(b.name) : this.open.add(b.name); save("open", [...this.open]); cx.notify(); })
+        .on_click((_e, cx) => {
+          open ? this.open.delete(b.name) : this.open.add(b.name);
+          if (this.hover?.name === b.name) this.hover = null;
+          save("open", [...this.open]);
+          cx.notify();
+        })
         .child(div().size(7).flex_none().rounded(4).bg(color))
         .child(h_flex().flex_1().min_w(0).gap(5).items_center()
           .child(div().min_w(0).truncate().text_color(b.status === "running" ? t.foreground : t.muted).child(b.name))
           .child(div().flex_none().text_size(11).text_color(t.dim).child(b.agent ?? "")))
-        .when(hits > 0, (e) => e.child(div().id(`sb-hits-${b.name}`).flex_none().px(5).h(17).rounded(5).bg(t.blocked + "26")
+        .when(hits > 0, (e) => e.child(div().id(`sb-hits-${b.name}`).flex_none().px(5).h(17).rounded(5).bg(tint(t.blocked, t.raised))
           .text_size(10.5).font_semibold().text_color(t.blocked).flex().items_center()
           .tooltip(`${blocked.length} blocked host${blocked.length === 1 ? "" : "s"}, ${hits} request${hits === 1 ? "" : "s"}`)
           .child(`${hits} blocked`))))
