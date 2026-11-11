@@ -63,10 +63,10 @@ Then put it in a layout of your own (Herdr's shipped layouts are read-only; clon
 
 ### In the sidebar, under Agents
 
-Add a block to the `sidebar-lists` column:
+Add a block to the `sidebar-lists` column. `"sidebar": true` gives it the look of the Agents list instead of a side panel card:
 
 ```json
-{ "id": "sandboxes", "type": "block", "content": { "mod": "sandboxes" }, "size": { "weight": 0.6 }, "min": 80 }
+{ "id": "sandboxes", "type": "block", "content": { "mod": "sandboxes", "props": { "sidebar": true } }, "size": { "weight": 0.6 }, "min": 80 }
 ```
 
 ## What it runs

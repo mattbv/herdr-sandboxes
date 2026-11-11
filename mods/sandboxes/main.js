@@ -6,7 +6,7 @@
 // the sbx daemon and never changes a sandbox. Output formats checked against sbx 0.47.0.
 import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { exec, theme, home } from "herdr";
+import { exec, theme, home, props } from "herdr";
 
 const EVERY = 10 * 1000;          // ms between sbx ls / policy log
 const HEALTH_EVERY = 15 * 1000;   // ms between health probes per running sandbox
@@ -205,13 +205,29 @@ export default class Sandboxes extends View {
       error: this.message,
       ok: this.boxes.length === 0 ? "No sandboxes. Start one with sbx run claude." : null,
     }[this.state];
-    return v_flex().size_full().min_h(0).bg(t.chrome).border_t(1).border_color(t.border).text_size(13)
-      .child(h_flex().px(16).h(41).pt(14).pb(5).flex_none().items_center().justify_between()
-        .child(div().text_size(11.5).font_medium().text_color(t.dim).child("Sandboxes"))
-        .when(this.boxes.length > 0, (e) => e.child(div().text_size(11).text_color(t.dim)
-          .child(`${running}/${this.boxes.length} running`))))
-      .when(note != null, (e) => e.child(div().px(16).text_size(12).text_color(this.state === "error" ? t.blocked : t.dim).child(note)))
-      .child(v_flex().id("sb-list").flex_1().min_h(0).px(8).overflow_y_scrollbar()
-        .children(this.boxes.map((b) => this.row(b, t))));
+    const noteEl = (pad) => div().px(pad).text_size(12).text_color(this.state === "error" ? t.blocked : t.dim).child(note);
+    const list = (pad) => v_flex().id("sb-list").flex_1().min_h(0).p(pad).overflow_y_scrollbar()
+      .children(this.boxes.map((b) => this.row(b, t)));
+
+    // In the sidebar (props: { "sidebar": true }): a section like the Agents list.
+    if (props()?.sidebar) {
+      return v_flex().size_full().min_h(0).bg(t.chrome).border_t(1).border_color(t.border).text_size(13)
+        .child(h_flex().px(16).h(41).pt(14).pb(5).flex_none().items_center().justify_between()
+          .child(div().text_size(11.5).font_medium().text_color(t.dim).child("Sandboxes"))
+          .when(this.boxes.length > 0, (e) => e.child(div().text_size(11).text_color(t.dim)
+            .child(`${running}/${this.boxes.length} running`))))
+        .when(note != null, (e) => e.child(noteEl(16)))
+        .child(list(0).px(8));
+    }
+
+    // Default: a side panel card like Files and Changes.
+    return v_flex().id("sandboxes").size_full().min_h(0).rounded(10).overflow_hidden().bg(t.background)
+      .border_1().border_color(t.border).text_color(t.foreground).text_size(13)
+      .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
+        .child(div().font_semibold().child("Sandboxes"))
+        .when(this.boxes.length > 0, (e) => e.child(div().px(5).py(1).rounded(4).border_1().border_color(t.border)
+          .text_size(10).text_color(t.muted).child(`${running}/${this.boxes.length} running`))))
+      .when(note != null, (e) => e.child(noteEl(14).pt(10)))
+      .child(list(6));
   }
 }
