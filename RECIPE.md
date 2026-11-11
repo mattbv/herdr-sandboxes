@@ -1,4 +1,4 @@
-# Sandboxes
+# Docker Sandboxes
 
 A side panel next to Files and Changes that lists every Docker Sandbox (`sbx`) on this computer: whether it runs, its CPU, memory and disk, the network requests its policy blocked, and a chart of its usage over the last 15 minutes, hour or 6 hours. Agents run in a sandbox (`sbx run claude <folder>`) already show in Herdr as agents; this panel shows the sandbox around them.
 
