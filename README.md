@@ -1,5 +1,7 @@
 # Sandboxes for Herdr
 
+![Sandboxes](preview.png)
+
 A [Herdr](https://herdr.dev) desktop app mod that shows your [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/) (`sbx`) beside your agents: which sandboxes run, how much CPU, memory and disk they use, and which network requests the sandbox policy blocked.
 
 It only runs `sbx`. No server, no extra service, nothing to install besides the mod.
@@ -22,8 +24,10 @@ Run an agent with `sbx run claude <folder>` in a Herdr tab. Herdr tracks it like
 Ask the agent in your Herdr window:
 
 ```text
-Read ~/.config/herdr-app/AGENTS.md, then add the mod at github.com/mattbv/herdr-sandboxes as a side panel next to Files and Changes
+Read ~/.config/herdr-app/AGENTS.md, then add this mod: https://github.com/mattbv/herdr-sandboxes
 ```
+
+It reads [RECIPE.md](RECIPE.md) and the files, tells you what the mod runs, copies `mods/sandboxes/` and adds the Sandboxes button next to Files and Changes. Say "in the sidebar" if you want it under the Agents list instead.
 
 Or by hand. Copy the mod (its `mod.json` keeps Herdr from docking it on its own):
 
