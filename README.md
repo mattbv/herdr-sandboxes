@@ -9,7 +9,8 @@ It only runs `sbx`. No server, no extra service, nothing to install besides the 
 - **One row per sandbox:** a status dot (green: running, grey: stopped), its name and its agent.
 - **Health:** `CPU · Mem · Disk` under each running sandbox.
 - **Blocked requests:** a red `N blocked` badge when the policy blocked network requests from that sandbox.
-- **Click a row** for its workspace folder and the blocked hosts, with how often and how long ago.
+- **Click a row** for its workspace folder, the blocked hosts (how often, how long ago) and a usage chart.
+- **Usage over time:** CPU, memory and disk as lines on one 0–100% chart, over the last 15 minutes, hour or 6 hours. Hover for the values at a moment.
 - When there is nothing to show, it says why: no sandboxes, the `sbx` daemon is off, or `sbx` is not installed.
 
 ## Agents in sandboxes already work in Herdr
@@ -68,6 +69,12 @@ Add a block to the `sidebar-lists` column. `"sidebar": true` gives it the look o
 ```json
 { "id": "sandboxes", "type": "block", "content": { "mod": "sandboxes", "props": { "sidebar": true } }, "size": { "weight": 0.6 }, "min": 80 }
 ```
+
+## Usage history
+
+While **Rec** in the panel header is on (the default), each health reading is kept for 6 hours, also across restarts, in the mod's own storage (`~/.config/herdr-app/data/sandboxes/store.json`). It never leaves your machine. Click **Rec** to pause, and **Clear** under a chart to forget that sandbox's history. Recording continues while the panel is closed, as long as the layout that holds it is shown.
+
+The chart colors (blue, orange, aqua) were checked for color-vision deficiency on light and dark backgrounds, and the legend always shows each value as text.
 
 ## What it runs
 
