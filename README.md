@@ -79,7 +79,7 @@ const enabled = [...(shared("workspace.panels") ?? ["files", "changes"]), ...ext
 .when(enabled.includes("sandboxes"), el => el.child(panelButton("sandboxes", "Sandboxes", "mods/sandboxes/box.svg")))
 ```
 
-A cloned mod does not get Herdr's updates to the tab bar. Clone it again after an update if you want them.
+A cloned mod does not get Herdr's updates to the tab bar, so clone it again after an update and redo the two changes. Herdr 0.1.16, for example, made unnamed agent tabs show their live session title; a clone from 0.1.15 shows "2", "3" instead.
 
 **In the sidebar, under Agents.** Add a block to the `sidebar-lists` column. `"sidebar": true` gives it the look of the Agents list:
 
@@ -121,7 +121,7 @@ Every 10 seconds:
 
 It never creates, stops, removes or changes a sandbox or its policy, and it makes no network requests of its own. One side effect: `sbx` counts the health reading as use, so a running sandbox's last-used time keeps moving while the panel runs.
 
-Tested with `sbx` 0.47.0 and the Herdr desktop app 0.1.15 on macOS (Apple silicon).
+Tested with `sbx` 0.47.0 and the Herdr desktop app 0.1.15 and 0.1.16 on macOS (Apple silicon).
 
 ## Credits
 

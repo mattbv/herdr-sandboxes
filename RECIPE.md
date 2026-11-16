@@ -71,7 +71,7 @@ A side panel next to Files and Changes that lists every Docker Sandbox (`sbx`) o
 - `sbx daemon status` can time out on a busy machine: only a program that can't start means "sbx is not installed"; show anything else as an error.
 - Place one copy. Each copy polls `sbx` and keeps its own history.
 - Clear the hover state when a row closes; the pointer's exit event may never arrive.
-- A cloned `tabs` mod does not get Herdr's updates to the tab bar.
+- A cloned `tabs` mod does not get Herdr's updates to the tab bar: clone it from the Herdr version in use. A clone from 0.1.15 on 0.1.16 misses the live agent titles (unnamed agent tabs show "2", "3").
 
 ## Done when
 
